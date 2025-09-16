@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/envelope.schema.json",
+  "title": "Agent Envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["tool", "message", "finish", "plan", "ask_human", "wait"]
+    },
+    "brief_rationale": {"type": "string"}
+  },
+  "required": ["type", "brief_rationale"],
+  "allOf": [
+    {
+      "if": {"properties": {"type": {"const": "tool"}}},
+      "then": {
+        "required": ["tool", "arguments"],
+        "properties": {
+          "tool": {"type": "string"},
+          "arguments": {"type": "object"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "message"}}},
+      "then": {
+        "required": ["message"],
+        "properties": {"message": {"type": "string"}}
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "plan"}}},
+      "then": {
+        "required": ["steps"],
+        "properties": {"steps": {"type": "array"}}
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "ask_human"}}},
+      "then": {
+        "required": ["reason"],
+        "properties": {
+          "reason": {"type": "string"},
+          "fields": {"type": "array"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "wait"}}},
+      "then": {
+        "properties": {
+          "event_type": {"type": "string"},
+          "duration_ms": {"type": "number"}
+        },
+        "anyOf": [
+          {"required": ["event_type"]},
+          {"required": ["duration_ms"]}
+        ]
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "finish"}}},
+      "then": {
+        "required": ["result"],
+        "properties": {"result": {"type": "object"}}
+      }
+    }
+  ]
+}
+

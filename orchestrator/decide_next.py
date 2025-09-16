@@ -41,7 +41,7 @@ def _summarize_tools(ws_tools: List[Dict[str, Any]]) -> str:
         mode = t.get("mode")
         desc = (t.get("description") or "").strip()
         risk = (t.get("risk") or {}).get("level", "unknown")
-        lines.append(f"- {name} (mode={mode}, risk={risk}) — {desc}")
+        lines.append(f"- {name} (mode={mode}, risk={risk}) - {desc}")
     return "\n".join(lines)
 
 
@@ -108,6 +108,13 @@ def _call_openai_json(messages: List[Dict[str, str]], model: str) -> Tuple[bool,
                             if getattr(part, "type", None) == "output_text":
                                 text_parts.append(getattr(part, "text", ""))
                 text = "\n".join(text_parts).strip()
+                try:
+                    # Best-effort debug dump (truncated)
+                    raw = getattr(resp, "model_dump_json", None)
+                    raw_json = raw() if callable(raw) else str(resp)
+                    logger.debug("OpenAI Responses raw (trunc 2000): %s", raw_json[:2000])
+                except Exception:
+                    pass
             except Exception as _e1:
                 # Fallback to chat.completions style (if present)
                 try:
@@ -117,6 +124,12 @@ def _call_openai_json(messages: List[Dict[str, str]], model: str) -> Tuple[bool,
                         messages=messages,
                     )
                     text = resp.choices[0].message.content  # type: ignore[index]
+                    try:
+                        # Minimal debug of raw response
+                        from json import dumps as _dumps
+                        logger.debug("OpenAI Chat raw (trunc 2000): %s", _dumps(resp.dict() if hasattr(resp, 'dict') else resp.__dict__, ensure_ascii=False)[:2000])
+                    except Exception:
+                        logger.debug("OpenAI Chat raw (repr trunc 2000): %s", repr(resp)[:2000])
                 except Exception as _e2:
                     # Last resort: legacy API below
                     logger.error("OpenAI new SDK calls failed: %s | %s", _e1, _e2)
@@ -130,12 +143,19 @@ def _call_openai_json(messages: List[Dict[str, str]], model: str) -> Tuple[bool,
                     messages=messages,
                 )
                 text = resp["choices"][0]["message"]["content"]
+                try:
+                    from json import dumps as _dumps
+                    logger.debug("OpenAI Legacy Chat raw (trunc 2000): %s", _dumps(resp, ensure_ascii=False)[:2000])
+                except Exception:
+                    pass
             except Exception as e:
                 # If the model rejects temperature/response_format, retry without them
                 logger.error("Legacy ChatCompletion failed: %s", e)
                 raise
 
         logger.debug("OpenAI returned %d chars", len(text) if text else -1)
+        if text:
+            logger.debug("OpenAI text (trunc 1000): %s", text[:1000])
         obj = json.loads(text)
         return True, obj
     except Exception as e:
