@@ -1,0 +1,24 @@
+{
+    "servers": [
+        {
+            "label": "local_powershell",
+            "url": "http://localhost:8000/sse/",
+            "allowed_tools": [
+                "get_files",
+                "read_file",
+                "get_current_date",
+                "get_current_location",
+                "get_processes",
+                "get_services",
+                "python_eval",
+                "python"
+            ],
+            "require_approval": "never",
+            "auth": {
+                "kind": "none"
+            },
+            "notes": "Local PowerShell + Python MCP server for testing"
+        }
+    ],
+    "default_label": "local_powershell"
+}

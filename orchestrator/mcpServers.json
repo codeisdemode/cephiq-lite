@@ -1,0 +1,33 @@
+{
+  "servers": [
+    {
+      "label": "local_powershell",
+      "url": "http://localhost:8000/sse/",
+      "allowed_tools": [
+        "get_files",
+        "read_file",
+        "get_current_date",
+        "get_current_location",
+        "get_processes",
+        "get_services",
+        "python",
+        "python_eval",
+        "read_block",
+        "write_block",
+        "create_file",
+        "create_directory",
+        "copy_item",
+        "move_item",
+        "delete_item",
+        "change_directory",
+        "powershell"
+      ],
+      "require_approval": "never",
+      "auth": {
+        "kind": "none"
+      },
+      "notes": "Local Hybrid MCP Server via FastMCP (stdio/SSE)"
+    }
+  ],
+  "default_label": "local_powershell"
+}

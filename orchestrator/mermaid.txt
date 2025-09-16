@@ -1,0 +1,154 @@
+graph TB
+    %% User Input Layer
+    A[👤 User Input<br/>Natural language + commands] --> B[💬 Chat Interface<br/>chat_interface.py]
+    B --> C[🎨 Rich Console UI<br/>Panels, Tables, Progress Bars]
+    
+    %% Session Management Layer
+    B --> D[💾 Session Manager<br/>Multi-user, persistence]
+    D --> DA[🆔 Session Storage<br/>User preferences, state]
+    D --> DB[📊 Session Statistics<br/>Usage tracking, analytics]
+    D --> DC[🔐 User Authentication<br/>Role-based permissions]
+    
+    %% Input Processing Layer
+    B --> E[🎯 Input Processor<br/>Parse requests + commands]
+    E --> EA[⌨️ Special Command Handler<br/>chat_commands.py]
+    EA --> EAA[📋 Command Registry<br/>/help /status /clear /exit]
+    EA --> EAB[🔍 Command Validation<br/>Interface-aware availability]
+    EA --> EAC[✅ Command Execution<br/>Cross-platform consistency]
+    
+    %% Policy & Security Layer
+    E --> F[🛡️ Policy Guard<br/>policy_guard.py]
+    F --> FA[⚠️ Danger Detection<br/>Destructive command patterns]
+    F --> FB[👥 Role Permissions<br/>User capability checking]
+    F --> FC[📁 File Operation Safety<br/>Protected directory checks]
+    F --> FD[⚡ System Command Filtering<br/>Safe execution validation]
+    
+    %% Context Management Layer  
+    F --> G[🔄 Chat-to-Pipeline Adapter<br/>Transform chat to envelope context]
+    G --> H[🎛️ Context Builder<br/>Add conversation history]
+    H --> HA[📝 Context Manager<br/>context_manager.py]
+    HA --> HAA[🧠 Smart History Management<br/>Topic-aware relevance scoring]
+    HA --> HAB[📊 Message Summarization<br/>Compress old conversations]
+    HA --> HAC[🏷️ Topic Extraction<br/>Content categorization]
+    HA --> HAD[⚖️ Relevance Scoring<br/>Select optimal messages]
+    
+    %% Existing Backend - Unchanged
+    HA --> I[🧠 runner.py<br/>EXISTING - Main orchestration loop]
+    I --> J[⚙️ decide_next.py<br/>EXISTING - GPT-5 decision engine]
+    J --> K[📦 Envelope Generation<br/>EXISTING - Validated JSON responses]
+    K --> L[🔧 tools_stub.py<br/>EXISTING - Tool dispatcher]
+    L --> M[⚙️ combined_mcp_server.py<br/>EXISTING - MCP tool server]
+    
+    %% Results Processing Layer
+    M --> N[📊 Result Processor<br/>Handle envelope responses]
+    N --> NA[❌ Error Handler<br/>error_handler.py]
+    NA --> NAA[🔍 Result Validation<br/>Check for valid responses]
+    NA --> NAB[🚨 Error Classification<br/>Invalid envelope, timeout, etc]
+    NA --> NAC[💡 Error Recovery<br/>User-friendly messages + suggestions]
+    NA --> NAD[🐛 Debug Information<br/>Technical details for debug mode]
+    
+    N --> NB[⚡ Async Task Manager<br/>async_task_manager.py]
+    NB --> NBA[🔄 Background Tasks<br/>Long-running operations]
+    NB --> NBB[📊 Progress Tracking<br/>Real-time status updates]
+    NB --> NBC[🔔 Task Notifications<br/>Completion alerts]
+    NB --> NBD[📋 Task Registry<br/>Active task management]
+    
+    %% Response Formatting Layer
+    NA --> O[🎨 Rich Formatter<br/>chat_formatter.py]
+    NB --> O
+    O --> OA[📋 Envelope Result Formatting<br/>Tool outputs, messages, errors]
+    O --> OB[📊 Table Generation<br/>File lists, process info]
+    O --> OC[🎨 Syntax Highlighting<br/>Code blocks, command output]
+    O --> OD[📈 Progress Visualization<br/>Task progress bars]
+    
+    %% Multiple Output Interfaces
+    O --> P[🖥️ Rich CLI Interface<br/>Primary console output]
+    P --> PA[🎭 Interactive Panels<br/>Welcome, help, status]
+    P --> PB[📊 Dynamic Tables<br/>File listings, results]
+    P --> PC[🎨 Colored Output<br/>Syntax highlighting]
+    P --> PD[⏳ Progress Indicators<br/>Real-time task updates]
+    
+    O --> Q[🌐 Web Interface<br/>web_chat.py]
+    Q --> QA[📡 WebSocket Streaming<br/>Real-time bidirectional communication]
+    Q --> QB[🎨 Rich Web Components<br/>Interactive tables, charts]
+    Q --> QC[📱 Responsive Design<br/>Mobile-friendly interface]
+    Q --> QD[🔄 Real-time Updates<br/>Live task progress]
+    
+    O --> R[📱 API Interface<br/>api_interface.py]
+    R --> RA[📦 Raw Envelope Output<br/>Direct pipeline responses]
+    R --> RB[🎨 Formatted Responses<br/>Human-readable content]
+    R --> RC[📊 Structured Data<br/>Machine-processable format]
+    R --> RD[🌊 Streaming Responses<br/>Chunked real-time delivery]
+    
+    %% Background Services Layer
+    NB --> S[⚡ Background Task Queue<br/>Async operation management]
+    S --> SA[📋 Task Scheduling<br/>Queue management]
+    S --> SB[🔄 Task Execution<br/>Threaded processing]
+    S --> SC[📊 Progress Monitoring<br/>Status tracking]
+    S --> SD[🔔 Completion Handling<br/>Result notification]
+    
+    %% Persistence Layer
+    D --> T[💾 Data Storage<br/>Session + conversation persistence]
+    T --> TA[🗄️ Session Database<br/>User sessions, preferences]
+    T --> TB[💬 Conversation History<br/>Message storage + search]
+    T --> TC[📊 Analytics Storage<br/>Usage metrics, patterns]
+    T --> TD[🔧 Task History<br/>Background operation logs]
+    
+    %% Notification System
+    NBC --> U[🔔 Notification Hub<br/>Multi-channel alerts]
+    U --> UA[🖥️ Console Notifications<br/>CLI task completion]
+    U --> UB[🌐 Web Notifications<br/>Browser alerts]
+    U --> UC[📡 API Callbacks<br/>Webhook notifications]
+    U --> UD[📱 Push Notifications<br/>Mobile alerts]
+    
+    %% Configuration & Management
+    V[⚙️ Configuration Manager<br/>System settings]
+    V --> VA[👥 User Roles & Permissions<br/>Access control]
+    V --> VB[🎛️ Feature Flags<br/>Component enablement]
+    V --> VC[📊 Resource Limits<br/>Memory, CPU, time constraints]
+    V --> VD[🔒 Security Policies<br/>Command restrictions]
+    
+    %% External Integrations
+    R --> W[🔗 External Systems<br/>Third-party integrations]
+    W --> WA[📊 Analytics Platforms<br/>Usage tracking]
+    W --> WB[🔔 Alert Systems<br/>Monitoring integration]
+    W --> WC[💾 External Storage<br/>Cloud persistence]
+    W --> WD[🔐 Identity Providers<br/>SSO integration]
+    
+    %% Monitoring & Observability
+    X[📊 Monitoring Dashboard<br/>System health]
+    X --> XA[📈 Performance Metrics<br/>Response times, throughput]
+    X --> XB[❌ Error Tracking<br/>Failure analysis]
+    X --> XC[👥 User Analytics<br/>Behavior patterns]
+    X --> XD[🔍 Debug Logging<br/>Troubleshooting info]
+    
+    %% Connect Configuration to Components
+    V --> F
+    V --> HA
+    V --> NB
+    V --> R
+    
+    %% Connect Monitoring to Key Components
+    I --> X
+    N --> X
+    S --> X
+    R --> X
+    
+    %% Key Features Box
+    Y["🎯 Production-Ready Features<br/>✅ Comprehensive error handling with recovery<br/>✅ Pre-filtering security with role-based access<br/>✅ Background tasks with progress tracking<br/>✅ Smart context management with summarization<br/>✅ Multiple output formats (raw/formatted/structured)<br/>✅ Cross-interface command consistency<br/>✅ Real-time streaming with WebSockets<br/>✅ Session persistence with multi-user support<br/>✅ Rich UI with tables and syntax highlighting<br/>✅ Async operations with notification system<br/>✅ Modular architecture - zero backend changes<br/>✅ Production monitoring and observability"]
+    
+    %% Styling
+    classDef new fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef existing fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef ui fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef security fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    classDef async fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storage fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+    classDef features fill:#fff8e1,stroke:#f57f17,stroke-width:3px
+    
+    class A,B,C,D,DA,DB,DC,E,EA,EAA,EAB,EAC,G,H,HA,HAA,HAB,HAC,HAD,N,NA,NAA,NAB,NAC,NAD,NB,NBA,NBB,NBC,NBD,O,OA,OB,OC,OD,S,SA,SB,SC,SD,U,UA,UB,UC,UD,V,VA,VB,VC,VD new
+    class I,J,K,L,M existing
+    class P,PA,PB,PC,PD,Q,QA,QB,QC,QD,R,RA,RB,RC,RD ui
+    class F,FA,FB,FC,FD security
+    class T,TA,TB,TC,TD,W,WA,WB,WC,WD,X,XA,XB,XC,XD storage
+    class Y features
