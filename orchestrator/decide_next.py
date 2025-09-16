@@ -4,7 +4,13 @@ import json
 import os
 from typing import Any, Dict, List, Tuple
 from pathlib import Path
-from .debug import get_logger
+try:
+    from .debug import get_logger  # type: ignore
+except Exception:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.append(str(_Path(__file__).resolve().parent))
+    from debug import get_logger  # type: ignore
 
 try:
     from .envelope_validator import validate_envelope  # type: ignore
@@ -30,6 +36,14 @@ def _try_import_openai():
         # Legacy SDK
         import openai  # type: ignore
         return ("legacy", openai)
+    except Exception:
+        return (None, None)
+
+
+def _try_import_anthropic():
+    try:
+        from anthropic import Anthropic  # type: ignore
+        return ("anthropic", Anthropic)
     except Exception:
         return (None, None)
 
@@ -163,6 +177,68 @@ def _call_openai_json(messages: List[Dict[str, str]], model: str) -> Tuple[bool,
         return False, f"OpenAI call failed: {e}"
 
 
+def _call_anthropic_json(messages: List[Dict[str, str]], model: str) -> Tuple[bool, Dict[str, Any] | str]:
+    kind, client_ctor = _try_import_anthropic()
+    if kind is None:
+        logger.error("Anthropic SDK not installed")
+        return False, "Anthropic SDK not installed. Install 'anthropic' package to enable Claude decisions."
+
+    try:
+        client = client_ctor()
+
+        # Convert messages to Anthropic format
+        system_message = ""
+        conversation_messages = []
+
+        for msg in messages:
+            if msg["role"] == "system":
+                system_message = msg["content"]
+            else:
+                conversation_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+
+        # Call Anthropic API
+        logger.debug("Calling Anthropic API model=%s", model)
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=4000,
+            system=system_message,
+            messages=conversation_messages,
+        )
+
+        # Extract and parse JSON response
+        text = response.content[0].text
+        logger.debug("Anthropic returned %d chars", len(text) if text else -1)
+
+        if text:
+            logger.debug("Anthropic text (trunc 1000): %s", text[:1000])
+            # Try to extract JSON from response
+            try:
+                # Look for JSON in the response
+                import re
+                json_match = re.search(r'\{.*\}', text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group()
+                    obj = json.loads(json_str)
+                    return True, obj
+                else:
+                    # If no JSON found, try parsing the whole response
+                    obj = json.loads(text)
+                    return True, obj
+            except json.JSONDecodeError:
+                logger.error("Failed to parse JSON from Anthropic response")
+                return False, "Anthropic response contained invalid JSON"
+
+        return False, "Empty response from Anthropic"
+
+    except Exception as e:
+        logger.error("Anthropic call failed: %s", e)
+        return False, f"Anthropic call failed: {e}"
+
+
 def decide_next(context: Dict[str, Any], workspace: Dict[str, Any], envelope_schema_path: Path, max_repairs: int = 2) -> Tuple[bool, Dict[str, Any] | List[str]]:
     tools_summary = _summarize_tools(workspace.get("tools", []))
     spend = ((workspace.get("policies") or {}).get("autonomy") or {}).get("spend_limits", {})
@@ -179,7 +255,12 @@ def decide_next(context: Dict[str, Any], workspace: Dict[str, Any], envelope_sch
         pass
     model = ((workspace.get("agent") or {}).get("model") or {}).get("name", DEFAULT_MODEL)
 
-    ok, result = _call_openai_json(messages, model)
+    # Determine which API to use based on model name
+    if model.startswith("claude"):
+        ok, result = _call_anthropic_json(messages, model)
+    else:
+        ok, result = _call_openai_json(messages, model)
+
     if not ok:
         return False, [str(result)]
 

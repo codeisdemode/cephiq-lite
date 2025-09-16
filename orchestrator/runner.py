@@ -24,7 +24,7 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent.parent   # docs
 HERE = Path(__file__).resolve().parent          # docs/orchestrator
-WORKSPACE_PATH = ROOT / "agent_workspace.autonomous.gpt5.json"
+WORKSPACE_PATH = ROOT / os.getenv("AGENT_WORKSPACE", "agent_workspace.autonomous.gpt5.json")
 ENVELOPE_SCHEMA_PATH = ROOT / "envelope.schema.json"
 MCP_SERVERS_CFG_CANDIDATES = [
     HERE / "mcpServers.json",
