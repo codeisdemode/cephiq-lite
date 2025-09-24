@@ -6,6 +6,17 @@ import os
 from pathlib import Path
 import json
 
+try:
+    # Prefer local logger (avoids relative import issues when launched differently)
+    from .debug import get_logger  # type: ignore
+except Exception:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.append(str(_Path(__file__).resolve().parent))
+    from debug import get_logger  # type: ignore
+
+logger = get_logger("tools_stub")
+
 USE_OPENAI_MCP = os.getenv("USE_OPENAI_MCP", "0") == "1"
 USE_DIRECT_MCP = os.getenv("USE_DIRECT_MCP", "0") == "1"
 USE_MCP_STDIO = os.getenv("USE_MCP_STDIO", "0") == "1"
@@ -45,20 +56,43 @@ elif USE_MCP_SSE:
 else:
     raise RuntimeError("No MCP client selected. Set USE_DIRECT_MCP=1, USE_OPENAI_MCP=1, USE_MCP_STDIO=1, or USE_MCP_SSE=1.")
 
+# Log selected transport once at import
+try:
+    transport = (
+        "OPENAI_MCP" if USE_OPENAI_MCP else
+        "DIRECT" if USE_DIRECT_MCP else
+        "STDIO" if USE_MCP_STDIO else
+        "SSE" if USE_MCP_SSE else
+        "(none)"
+    )
+    logger.info("MCP transport selected: %s", transport)
+except Exception:
+    pass
+
 
 def mcp_search(query: str, server_label: str | None = None, server_url: str | None = None) -> Dict[str, Any]:
+    logger.debug("mcp_search query=%s label=%s url=%s", query, server_label, server_url)
     if USE_OPENAI_MCP:
         if not server_label or not server_url:
             server_label, server_url = _resolve_server()
         if not (server_label and server_url):
             raise RuntimeError("MCP server not configured. Provide server_label/server_url or configure docs/mcpServers.json.")
+        logger.debug("mcp_search via OPENAI_MCP label=%s url=%s", server_label, server_url)
         return mcp_client_openai.search(server_label, server_url, query)  # type: ignore[name-defined]
     if USE_DIRECT_MCP:
         if not server_url:
             _, server_url = _resolve_server()
         if not server_url:
             raise RuntimeError("MCP server URL not configured. Provide server_url or configure docs/mcpServers.json.")
+        logger.debug("mcp_search via DIRECT url=%s", server_url)
         return mcp_client_direct.search(server_url, query)  # type: ignore[name-defined]
+    if USE_MCP_STDIO:
+        logger.debug("mcp_search via STDIO")
+        # stdio tools are addressed by name, pass query in arguments
+        return mcp_client_stdio.call_tool("search", {"query": query})  # type: ignore[name-defined]
+    if USE_MCP_SSE:
+        logger.debug("mcp_search via SSE url=%s", server_url)
+        return mcp_client_sse.call_tool("search", {"query": query}, server_url=server_url)  # type: ignore[name-defined]
     # Should never reach here due to guard above
     raise RuntimeError("MCP client not available.")
 
@@ -80,7 +114,7 @@ def mcp_fetch(id: str, server_label: str | None = None, server_url: str | None =
         # For stdio servers, expose fetch via tool name
         return mcp_client_stdio.call_tool("fetch", {"id": id})  # type: ignore[name-defined]
     if USE_MCP_SSE:
-        return mcp_client_sse.call_tool("fetch", {"id": id})  # type: ignore[name-defined]
+        return mcp_client_sse.call_tool("fetch", {"id": id}, server_url=server_url)  # type: ignore[name-defined]
     # Should never reach here due to guard above
     raise RuntimeError("MCP client not available.")
 
@@ -148,12 +182,42 @@ def _load_servers_map() -> dict[str, str]:
 
 
 def execute_envelope_tool(tool: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    logger.debug("execute_envelope_tool tool=%s args=%s", tool, arguments)
     if tool == "mcp_search":
         return mcp_search(**arguments)
     if tool == "mcp_fetch":
         return mcp_fetch(**arguments)
+
+    # Handle direct workflow tools
+    if "workflow" in tool:
+        if not (USE_MCP_STDIO or USE_MCP_SSE or USE_DIRECT_MCP):
+            return {"error": "workflow tools require transport"}
+
+        if USE_DIRECT_MCP:
+            # Handle workflow tools directly in DIRECT mode
+            return mcp_client_direct.call_tool(tool, arguments)  # type: ignore[name-defined]
+
+    # Generic tool execution: call any available tool by its name
+    if tool not in {"mcp_call", "mcp_search", "mcp_fetch"}:
+        if USE_MCP_STDIO:
+            return mcp_client_stdio.call_tool(tool, arguments)  # type: ignore[name-defined]
+        if USE_MCP_SSE:
+            # Select a server URL if available
+            servers = _load_servers_map()
+            server_url = next(iter(servers.values())) if servers else None
+            return mcp_client_sse.call_tool(tool, arguments, server_url=server_url)  # type: ignore[name-defined]
+        if USE_DIRECT_MCP:
+            return mcp_client_direct.call_tool(tool, arguments)  # type: ignore[name-defined]
+
     if tool == "mcp_call":
-        if not (USE_MCP_STDIO or USE_MCP_SSE):
+        if USE_DIRECT_MCP:
+            # In DIRECT mode, unwrap mcp_call and execute the tool directly
+            tool_name = arguments.get("tool_name") or arguments.get("name")
+            tool_args = arguments.get("arguments") or {}
+            if not tool_name:
+                return {"error": "Missing 'tool_name' or 'name' for mcp_call"}
+            return execute_envelope_tool(tool_name, tool_args)
+        elif not (USE_MCP_STDIO or USE_MCP_SSE):
             return {"error": "mcp_call requires USE_MCP_STDIO=1 or USE_MCP_SSE=1"}
         name = arguments.get("name")
         params = arguments.get("arguments") or {}
@@ -177,6 +241,7 @@ def execute_envelope_tool(tool: str, arguments: Dict[str, Any]) -> Dict[str, Any
                     return {"error": "Multiple MCP servers configured; provide 'server_label' in arguments"}
                 if len(servers) == 1:
                     server_url = next(iter(servers.values()))
+        logger.debug("mcp_call name=%s via %s url=%s", name, "STDIO" if USE_MCP_STDIO else "SSE", server_url)
         if USE_MCP_STDIO:
             return mcp_client_stdio.call_tool(name, params)  # type: ignore[name-defined]
         else:

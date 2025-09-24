@@ -21,6 +21,7 @@ import contextlib
 import json
 from typing import List, Dict, Any, Optional
 import sys
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
@@ -79,11 +80,17 @@ def get_files(path: str = ".") -> Dict[str, Any]:
 
     items_list = []
     try:
-        raw = json.loads(result.output)
-        if not isinstance(raw, list):
-            raw = [raw]
+        # Handle empty directory case (PowerShell returns empty string)
+        if not result.output or result.output.strip() == "":
+            raw = []
+        else:
+            raw = json.loads(result.output)
+            if not isinstance(raw, list):
+                raw = [raw]
         for item in raw:
-            item_type = "directory" if "Directory" in item.get("Attributes", "") else "file"
+            # Check if it's a directory using the Attributes field (16 = Directory, 32 = Archive/File)
+            attributes = item.get("Attributes", 0)
+            item_type = "directory" if attributes == 16 else "file"
             items_list.append({
                 "name": item.get("Name", ""),
                 "type": item_type,
@@ -259,6 +266,202 @@ def write_block(path: str, start_line: int, text: str) -> Dict[str, Any]:
         return {"success": True, "error": None}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+# --- Workflow System ---
+
+def load_workflows_from_flows_dir(flow_dir: str = "flows") -> Dict[str, Any]:
+    """Load workflow definitions from JSON files in the flows directory"""
+    workflows = {}
+    flow_path = Path(flow_dir)
+
+    if not flow_path.exists():
+        logger.warning(f"Flows directory '{flow_dir}' does not exist")
+        return workflows
+
+    for flow_file in flow_path.glob("*.json"):
+        try:
+            with open(flow_file, 'r', encoding='utf-8') as f:
+                flow_def = json.load(f)
+
+            # Validate required fields
+            required_fields = ["id", "name", "steps"]
+            for field in required_fields:
+                if field not in flow_def:
+                    logger.error(f"Flow file {flow_file} missing required field: {field}")
+                    continue
+
+            workflows[flow_def["id"]] = flow_def
+            logger.info(f"Loaded workflow: {flow_def['id']} - {flow_def['name']}")
+
+        except Exception as e:
+            logger.error(f"Error loading flow file {flow_file}: {e}")
+
+    return workflows
+
+def create_workflow_tools():
+    """Dynamically create MCP tools for each workflow at startup"""
+    for template_id, template_def in workflow_templates.items():
+        tool_name = f"start_{template_id}_workflow"
+        description = f"Start {template_def['name']} workflow. {template_def.get('description', '')}"
+
+        # Create a closure to capture the template_id
+        def make_workflow_tool(tid: str):
+            def workflow_tool() -> Dict[str, Any]:
+                return start_workflow(tid)
+            return workflow_tool
+
+        # Register the tool with FastMCP
+        workflow_func = make_workflow_tool(template_id)
+        workflow_func.__name__ = tool_name
+        workflow_func.__doc__ = description
+
+        # Use the mcp.tool decorator programmatically
+        mcp.tool(name=tool_name)(workflow_func)
+        logger.info(f"Auto-registered workflow tool: {tool_name}")
+
+# In-memory workflow state storage
+workflow_states = {}
+
+# Load workflow templates dynamically from flows directory
+# Use absolute path resolution for flows directory
+import os
+flows_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "flows")
+workflow_templates = load_workflows_from_flows_dir(flows_dir)
+
+# Auto-create workflow tools at startup
+create_workflow_tools()
+
+@mcp.tool()
+def start_workflow(template_id: str) -> Dict[str, Any]:
+    """
+    Start a workflow by template ID
+    Returns workflow state and initial guidance for the LLM
+    """
+    logger.info(f"Starting workflow: {template_id}")
+
+    if template_id not in workflow_templates:
+        return {"error": f"Unknown workflow template: {template_id}"}
+
+    template = workflow_templates[template_id]
+    workflow_id = f"{template_id}_{len(workflow_states) + 1:03d}"
+
+    # Initialize workflow state
+    workflow_state = {
+        "workflow_id": workflow_id,
+        "template_id": template_id,
+        "template_name": template["name"],
+        "current_step": 1,
+        "total_steps": len(template["steps"]),
+        "status": "active",
+        "collected_data": {},
+        "step_results": {}
+    }
+
+    # Store state
+    workflow_states[workflow_id] = workflow_state
+
+    # Get first step guidance
+    first_step = template["steps"][0]
+
+    return {
+        "workflow_id": workflow_id,
+        "template_name": template["name"],
+        "current_step": 1,
+        "total_steps": len(template["steps"]),
+        "step_action": first_step["action"],
+        "guidance": first_step["guidance"],
+        "next_tools": first_step.get("next_tools", []),
+        "command": first_step.get("command"),
+        "status": "started"
+    }
+
+@mcp.tool()
+def continue_workflow(workflow_id: str, step_result: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Continue a workflow to the next step
+    step_result: Results from the previous step's tool execution
+    """
+    logger.info(f"Continuing workflow: {workflow_id}")
+
+    if workflow_id not in workflow_states:
+        return {"error": f"Workflow not found: {workflow_id}"}
+
+    state = workflow_states[workflow_id]
+    template = workflow_templates[state["template_id"]]
+
+    if state["status"] != "active":
+        return {"error": f"Workflow {workflow_id} is not active (status: {state['status']})"}
+
+    # Store results from previous step
+    if step_result:
+        state["step_results"][state["current_step"]] = step_result
+
+    # Move to next step
+    current_step_num = state["current_step"]
+    next_step_num = current_step_num + 1
+
+    # Check if workflow is complete
+    if next_step_num > state["total_steps"]:
+        state["status"] = "completed"
+        return {
+            "workflow_id": workflow_id,
+            "status": "completed",
+            "guidance": "Workflow completed successfully! All system information has been collected.",
+            "collected_data": state["step_results"]
+        }
+
+    # Get next step
+    state["current_step"] = next_step_num
+    next_step = template["steps"][next_step_num - 1]  # 0-indexed array
+
+    return {
+        "workflow_id": workflow_id,
+        "current_step": next_step_num,
+        "total_steps": state["total_steps"],
+        "step_action": next_step["action"],
+        "guidance": next_step["guidance"],
+        "next_tools": next_step.get("next_tools", []),
+        "command": next_step.get("command"),
+        "status": "continuing"
+    }
+
+@mcp.tool()
+def continue_current_workflow(step_result: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Continue the most recently started workflow to the next step
+    step_result: Results from the previous step's tool execution
+    """
+    if not workflow_states:
+        return {"error": "No active workflows"}
+
+    # Get the most recent workflow (highest numbered ID)
+    latest_workflow_id = max(workflow_states.keys(), key=lambda x: x.split('_')[-1])
+    return continue_workflow(latest_workflow_id, step_result)
+
+@mcp.tool()
+def get_workflow_status(workflow_id: str) -> Dict[str, Any]:
+    """
+    Get current status of a workflow
+    """
+    if workflow_id not in workflow_states:
+        return {"error": f"Workflow not found: {workflow_id}"}
+
+    state = workflow_states[workflow_id]
+    template = workflow_templates[state["template_id"]]
+
+    current_step = None
+    if state["current_step"] <= len(template["steps"]):
+        current_step = template["steps"][state["current_step"] - 1]
+
+    return {
+        "workflow_id": workflow_id,
+        "template_name": state["template_name"],
+        "current_step": state["current_step"],
+        "total_steps": state["total_steps"],
+        "status": state["status"],
+        "current_step_action": current_step["action"] if current_step else None,
+        "step_results_count": len(state["step_results"])
+    }
 
 # --- Entry Point ---
 

@@ -78,12 +78,22 @@ def run_one_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("Invalid envelope: %s", errs)
         return {**context, "error": {"kind": "invalid_envelope", "details": errs}}
 
-    etype = envelope["type"]
+    etype = envelope.get("state") or envelope.get("type")  # Support both schema formats
     if etype == "tool":
         tool = envelope.get("tool")
         args = envelope.get("arguments", {})
+
+        # Validate tool name
+        if not tool or tool == "unknown":
+            logger.error("Invalid tool name in envelope: %s", tool)
+            return {**context, "error": {"kind": "invalid_tool_name", "tool": tool, "message": "Tool name is missing or invalid"}}
+
         logger.debug("Executing tool: %s args=%s", tool, args)
+        import time as _time
+        _t0 = _time.perf_counter()
         obs = execute_envelope_tool(tool, args)
+        _t1 = _time.perf_counter()
+        logger.debug("Tool %s completed in %.1f ms", tool, (_t1 - _t0) * 1000)
         # Simple approval gating: if tool execution signals approval_required
         if isinstance(obs, dict) and (obs.get("approval_required") or obs.get("error") == "approval_required"):
             logger.info("Tool %s requires approval: %s", tool, obs)
@@ -94,10 +104,21 @@ def run_one_cycle(context: Dict[str, Any]) -> Dict[str, Any]:
         context.setdefault("history", []).append({"type": "tool_call", "tool": tool, "args": args, "obs": obs})
         return context
     if etype == "message":
-        context.setdefault("history", []).append({"type": "message", "role": "assistant", "content": envelope.get("message")})
+        # Handle both envelope formats
+        message_content = envelope.get("message", "")
+        if not message_content and "conversation" in envelope:
+            message_content = envelope["conversation"].get("utterance", "")
+        context.setdefault("history", []).append({"type": "message", "role": "assistant", "content": message_content})
         return context
     if etype == "plan":
-        context["plan"] = envelope.get("steps", [])
+        # Extract plan object from envelope (schema-compliant)
+        plan_obj = envelope.get("plan", {})
+        context["plan"] = plan_obj
+
+        # Persist the goal if not already set
+        if plan_obj.get("root_task") and not context.get("goal"):
+            context["goal"] = plan_obj["root_task"]
+
         context.setdefault("history", []).append({"type": "message", "role": "system", "content": "Plan recorded."})
         return context
     if etype == "ask_human":

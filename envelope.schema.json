@@ -24,7 +24,31 @@
       "type": "object",
       "properties": {
         "budget": {"type": "object"},
-        "risk": {"type": "object"}
+        "risk": {"type": "object"},
+        "goal_update": {"type": "object"},
+        "todo_update": {
+          "type": "object",
+          "properties": {
+            "action": {"type": "string", "enum": ["add", "remove", "complete", "update"]},
+            "todo": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "string"},
+                "content": {"type": "string"},
+                "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]},
+                "priority": {"type": "string", "enum": ["low", "medium", "high"]},
+                "related_files": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "string"},
+                "dependencies": {"type": "array", "items": {"type": "string"}},
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time"}
+              },
+              "required": ["id", "content", "status"]
+            },
+            "reason": {"type": "string"}
+          },
+          "required": ["action", "todo"]
+        }
       }
     }
   },
