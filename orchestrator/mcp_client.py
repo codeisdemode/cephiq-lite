@@ -8,16 +8,55 @@ external MCP servers for enhanced tool functionality.
 import json
 import asyncio
 import aiohttp
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from rich.console import Console
 
 console = Console()
 
+def _resolve_base_url() -> Optional[str]:
+    """Resolve base HTTP URL from env or mcpServers.json.
+
+    Looks for env MCP_BASE_URL first; otherwise returns the first configured server
+    (or default_label) with its base origin (without a path).
+    """
+    import os
+    env = os.getenv("MCP_BASE_URL")
+    if env:
+        return env
+    # Fallback to mcpServers.json if present
+    try:
+        root = Path(__file__).resolve().parent.parent
+        here = Path(__file__).resolve().parent
+        for cfg in [here / "mcpServers.json", root / "mcpServers.json", root.parent / "mcpServers.json"]:
+            if not cfg.exists():
+                continue
+            try:
+                data = json.loads(cfg.read_text(encoding="utf-8"))
+            except Exception:
+                data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+            servers = data.get("servers", [])
+            default_label = data.get("default_label")
+            def to_origin(u: str) -> str:
+                from urllib.parse import urlsplit
+                p = urlsplit(u)
+                return f"{p.scheme}://{p.netloc}"
+            if default_label:
+                for s in servers:
+                    if s.get("label") == default_label and s.get("url"):
+                        return to_origin(s["url"])
+            if servers and servers[0].get("url"):
+                return to_origin(servers[0]["url"])
+    except Exception:
+        return None
+    return None
+
+
 class MCPClient:
     """MCP Client for connecting to external MCP servers"""
     
-    def __init__(self, server_url: str = "http://localhost:8000"):
-        self.server_url = server_url
+    def __init__(self, server_url: Optional[str] = None):
+        self.server_url = server_url or _resolve_base_url() or ""
         self.session = None
         self.connected = False
         self.available_tools = {}
@@ -163,7 +202,7 @@ class MCPToolIntegrations:
 # Singleton MCP client instance
 _mcp_client_instance = None
 
-async def get_mcp_client(server_url: str = "http://localhost:8000") -> MCPClient:
+async def get_mcp_client(server_url: Optional[str] = None) -> MCPClient:
     """Get or create MCP client instance"""
     global _mcp_client_instance
     

@@ -1,0 +1,59 @@
+{
+  "id": "contract_analysis",
+  "name": "Dutch Construction Contract Analysis",
+  "description": "Comprehensive analysis of Dutch construction contracts for compliance with VAT, safety plans, payment terms, and bank guarantee requirements",
+  "steps": [
+    {
+      "id": 1,
+      "action": "contract_intake",
+      "guidance": "I'll help you analyze the Dutch construction contract for compliance. First, let me create an execution plan for analyzing the provided contract document. I'll define steps for text extraction, compliance verification, risk assessment, select appropriate tools, and define expected outputs.",
+      "next_tools": ["create_file"],
+      "completion_check": "plan_created"
+    },
+    {
+      "id": 2,
+      "action": "text_extraction",
+      "guidance": "Now I'll extract text from the contract document at C:\\Users\\paul-\\Documents\\cephiq-core\\contracten\\doc24883920250627091208.pdf using the specialized PDF extractor tool. This tool automatically detects if the PDF is scanned and can attempt OCR if needed. I'll extract both text and metadata for comprehensive analysis.",
+      "next_tools": ["extract_pdf_text", "extract_pdf_metadata"],
+      "command": "Extract text and metadata from contract PDF using specialized PDF tools",
+      "completion_check": "text_extracted"
+    },
+    {
+      "id": 3,
+      "action": "compliance_analysis",
+      "guidance": "I'll now analyze the extracted contract text to identify obligations, rights, and risks, focusing on Dutch construction compliance requirements. I'll verify against the compliance checklist: VAT (BTW) compliance, safety plans (V&G/VCA), payment terms, and bank guarantee clauses. I'll highlight any missing or problematic clauses.",
+      "next_tools": ["execute_python"],
+      "command": "Analyze contract for Dutch compliance requirements",
+      "completion_check": "analysis_completed"
+    },
+    {
+      "id": 4,
+      "action": "risk_assessment",
+      "guidance": "Processing the analysis results to generate contract insights and assign confidence scores. I'll identify high-risk areas, calculate compliance scores (0-1), and create structured findings with specific recommendations for each compliance area.",
+      "next_tools": ["create_file"],
+      "completion_check": "results_processed"
+    },
+    {
+      "id": 5,
+      "action": "report_generation",
+      "guidance": "Creating a comprehensive Markdown report with: 📊 Executive Summary, 📑 Detailed Findings, ⚠️ Risk Assessment, ✅ Compliance Scoring, 💡 Actionable Recommendations. The report will be saved in the contract_analysis_results directory.",
+      "next_tools": ["create_file"],
+      "completion_check": "report_generated"
+    },
+    {
+      "id": 6,
+      "action": "quality_review",
+      "guidance": "Evaluating the report quality, providing confidence scores (0-1), identifying weak spots in the analysis, and suggesting improvements for accuracy and clarity. I'll also log performance metrics including processing time and any retries.",
+      "next_tools": ["create_file"],
+      "completion_check": "quality_review_complete"
+    },
+    {
+      "id": 7,
+      "action": "report_formatting",
+      "guidance": "Now I'll enhance the report layout and formatting to create a more professional and readable document. I'll analyze the current structure, improve visual hierarchy, optimize markdown formatting, and ensure the report is presentation-ready with consistent styling and improved readability.",
+      "next_tools": ["read_file", "write_block", "create_file"],
+      "command": "Format and improve layout of contract_analysis_report.md",
+      "completion_check": "workflow_complete"
+    }
+  ]
+}

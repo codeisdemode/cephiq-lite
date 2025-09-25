@@ -4,11 +4,17 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from mcp.client.sse import aconnect_sse
 from mcp.client.session import ClientSession
-from .debug import get_logger
+try:
+    from .debug import get_logger  # type: ignore
+except Exception:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.append(str(_Path(__file__).resolve().parent))
+    from debug import get_logger  # type: ignore
 
 
 logger = get_logger("mcp_client_sse")
@@ -18,12 +24,37 @@ _ACMS: dict[str, any] = {}
 
 
 def _load_mcp_url() -> Optional[str]:
-    # Prefer explicit env var
+    """Resolve SSE URL from env or mcpServers.json.
+
+    Order:
+    1) Env var MCP_SSE_URL
+    2) mcpServers.json (default_label or first server)
+    """
     url = os.getenv("MCP_SSE_URL")
     if url:
         return url
-    # Default to local SSE server without trailing slash
-    return "http://localhost:8000/sse"
+    # Try common config locations
+    try:
+        root = Path(__file__).resolve().parent.parent
+        here = Path(__file__).resolve().parent
+        for cfg in [here / "mcpServers.json", root / "mcpServers.json", root.parent / "mcpServers.json"]:
+            if not cfg.exists():
+                continue
+            try:
+                data = json.loads(cfg.read_text(encoding="utf-8"))
+            except Exception:
+                data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+            servers = data.get("servers", [])
+            default_label = data.get("default_label")
+            if default_label:
+                for s in servers:
+                    if s.get("label") == default_label:
+                        return s.get("url")
+            if servers:
+                return servers[0].get("url")
+    except Exception:
+        return None
+    return None
 
 
 async def _ensure_session(server_url: Optional[str] = None) -> ClientSession:
@@ -51,35 +82,31 @@ async def _ensure_session(server_url: Optional[str] = None) -> ClientSession:
             server_to_client_stream, client_from_server_stream = anyio.create_memory_object_stream(100)
             client_to_server_stream, server_from_client_stream = anyio.create_memory_object_stream(100)
 
-            # Get the messages endpoint from SSE
-            messages_url = None
+            # We'll obtain the messages endpoint from the SAME SSE connection we keep open
+            messages_url: Optional[str] = None
+            messages_ready = asyncio.Event()
 
-            # Use a separate client for endpoint discovery to avoid stream conflicts
-            endpoint_client = httpx.AsyncClient()
-            try:
-                async with aconnect_sse(endpoint_client, "GET", url) as event_source:
-                    # Process endpoint event
-                    async for event in event_source.aiter_sse():
-                        if event.event == 'endpoint' and event.data:
-                            messages_url = event.data.strip()
-                            logger.info("Messages endpoint: %s", messages_url)
-                            break
-            finally:
-                await endpoint_client.aclose()
-
-            if not messages_url:
-                raise RuntimeError("No messages endpoint received from SSE server")
-
-            # Long-lived event processing task
+            # Long-lived event processing task (single persistent SSE connection)
             async def process_events():
                 """Continuously read SSE events and forward to client"""
-                event_client = httpx.AsyncClient()
+                event_client = httpx.AsyncClient(timeout=60.0)  # Longer timeout for event stream
                 try:
                     async with aconnect_sse(event_client, "GET", url) as event_source:
-                        logger.debug("SSE event processing started")
+                        logger.info("SSE event processing started: %s", url)
                         async for event in event_source.aiter_sse():
-                            logger.debug("Received SSE event: %s - %s", event.event, event.data[:100] if event.data else None)
-                            if event.event == 'message' and event.data:
+                            # Log at INFO so it's visible without DEBUG
+                            preview = (event.data[:200] + "...") if (event.data and len(event.data) > 200) else event.data
+                            logger.info("SSE event: %s", event.event)
+                            logger.debug("SSE event data: %s", preview)
+                            # The first event should provide the messages endpoint for this session
+                            if event.event == 'endpoint' and event.data:
+                                nonlocal messages_url
+                                messages_url = event.data.strip()
+                                logger.info("Messages endpoint: %s", messages_url)
+                                messages_ready.set()
+                                continue
+                            # Forward any non-endpoint event with JSON payload as JSON-RPC
+                            if event.data and event.event != 'endpoint':
                                 try:
                                     # Parse SSE data as JSON-RPC message and wrap in SessionMessage
                                     data = json.loads(event.data)
@@ -91,35 +118,58 @@ async def _ensure_session(server_url: Optional[str] = None) -> ClientSession:
                                     logger.warning("Failed to parse SSE event: %s", e)
                 except Exception as e:
                     logger.error("SSE event processing failed: %s", e, exc_info=True)
-                    # Send error through the stream instead of the stream itself
-                    error_msg = SessionMessage(message=JSONRPCMessage(
-                        jsonrpc="2.0",
-                        error={"code": -32000, "message": str(e)},
-                        id=None
-                    ))
-                    await server_to_client_stream.send(error_msg)
+                    # Try to send error through the stream if still open
+                    try:
+                        error_msg = SessionMessage(message=JSONRPCMessage(
+                            jsonrpc="2.0",
+                            error={"code": -32000, "message": str(e)},
+                            id=None
+                        ))
+                        await server_to_client_stream.send(error_msg)
+                    except Exception as stream_err:
+                        logger.debug("Could not send error through closed stream: %s", stream_err)
                 finally:
-                    await event_client.aclose()
+                    try:
+                        await event_client.aclose()
+                    except Exception as close_err:
+                        logger.debug("Error closing event client: %s", close_err)
 
-            # Start event processing in background
+            # Start event processing in background (discovers messages_url and handles responses)
             event_task = asyncio.create_task(process_events())
 
             async def message_sender():
                 """Send messages from client to server via HTTP POST"""
                 try:
+                    # Wait until the messages endpoint is known for this SSE session
+                    await messages_ready.wait()
+                    assert messages_url is not None
                     async for message in server_from_client_stream:
                         # Convert message to JSON and POST to messages endpoint
                         message_json = json.dumps(message.message.dict())
 
-                        # Send POST request to messages endpoint
+                        # Build absolute URL for messages endpoint from the original SSE URL origin
+                        import urllib.parse
+                        origin = urllib.parse.urlsplit(url)
+                        base_origin = f"{origin.scheme}://{origin.netloc}"
+                        # messages_url is expected to start with '/messages/...'
+                        full_url = urllib.parse.urljoin(base_origin, messages_url)
+                        # Ensure timeout param is present for long polling
+                        parsed = urllib.parse.urlsplit(full_url)
+                        q = (parsed.query + "&" if parsed.query else "") + "timeout=30"
+                        full_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, q, parsed.fragment))
+
+                        # Send POST request to messages endpoint with longer timeout
                         response = await client.post(
-                            f"http://127.0.0.1:8000{messages_url}",
+                            full_url,
                             content=message_json,
-                            headers={"Content-Type": "application/json"}
+                            headers={"Content-Type": "application/json"},
+                            timeout=30.0  # Increase timeout to prevent premature connection closure
                         )
 
                         if response.status_code != 202:  # 202 Accepted is expected
                             logger.warning("Message POST failed: %s - %s", response.status_code, response.text)
+                        else:
+                            logger.info("Message sent to %s (status=%s)", full_url, response.status_code)
                 except Exception as e:
                     logger.error("Message sender error: %s", e)
 

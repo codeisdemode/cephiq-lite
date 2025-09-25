@@ -2,7 +2,7 @@
   "servers": [
     {
       "label": "local_powershell",
-      "url": "http://localhost:8000/sse/",
+      "url": "http://localhost:8000/sse",
       "allowed_tools": [
         "get_files",
         "read_file",
@@ -20,7 +20,17 @@
         "move_item",
         "delete_item",
         "change_directory",
-        "powershell"
+        "powershell",
+        "extract_pdf_text",
+        "extract_pdf_metadata",
+        "format_markdown_report",
+        "start_system_info_workflow",
+        "start_rma_return_workflow",
+        "start_employee_onboarding_workflow",
+        "start_contract_analysis_workflow",
+        "continue_workflow",
+        "continue_current_workflow",
+        "get_workflow_status"
       ],
       "require_approval": "never",
       "auth": {

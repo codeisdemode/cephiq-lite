@@ -23,6 +23,11 @@
       "risk": { "level": "low" }
     }
   ],
+  "workflow_mode": {
+    "enabled": true,
+    "intent_confidence_threshold": 0.7,
+    "supported_workflows": ["rma_process_v1", "employee_onboarding_v1", "system_info_v1"]
+  },
   "policies": {
     "autonomy": {
       "spend_limits": {

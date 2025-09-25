@@ -21,6 +21,9 @@ def _ensure_logging() -> None:
     logger = logging.getLogger()
     logger.setLevel(level)
 
+    # Clear any existing handlers to prevent duplicates
+    logger.handlers.clear()
+
     # File handler (rotating)
     fh = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
     fh.setLevel(level)
@@ -33,6 +36,14 @@ def _ensure_logging() -> None:
     ch.setLevel(level)
     ch.setFormatter(fmt)
     logger.addHandler(ch)
+
+    # Suppress verbose HTTP client logging to prevent reentrancy issues
+    # These libraries generate excessive debug logs that cause file locking conflicts
+    http_loggers = ["httpx", "httpcore", "anthropic"]
+    for lib_name in http_loggers:
+        lib_logger = logging.getLogger(lib_name)
+        lib_logger.setLevel(logging.WARNING)  # Only show warnings and errors
+        lib_logger.propagate = False  # Prevent propagation to root logger
 
     _CONFIGURED = True
 

@@ -52,3 +52,51 @@ runs.jsonl
 
 # PowerShell MCP Server
 powershell_python_mcp.log
+
+# Contract files (sensitive)
+contracten/
+contractvoorbeelden.zip
+offertes/
+offertes.zip
+
+# Backup directories
+backup/
+
+# Test directories
+test/
+
+# Large data files
+*.csv
+*.jsonl
+
+# System files
+debug.log*
+
+# HTML/JS demo files
+*.html
+*.js
+*.css
+app.js
+index.html
+script.js
+styles.css
+
+# Batch files
+*.bat
+
+# Art gallery demo
+art_gallery_demo/
+data_viz_gallery/
+chess-tutor/
+
+# Salary analysis files
+salary_summary.py
+enhanced_salary_summary.py
+sample_employees.csv
+
+# Analysis reports
+completion_behavior_analysis.md
+enhanced_todo_analysis_report.md
+
+# Workspace files
+agent_workspace.autonomous.claude.json

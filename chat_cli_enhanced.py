@@ -353,7 +353,7 @@ Just type your message to start a conversation with the agent.
                         status = new_todo["status"]
                         priority = new_todo["priority"]
 
-                        print(f"\n📝 Todo added: {content} ({status}, priority: {priority})")
+                        print(f"\nTodo added: {content} ({status}, priority: {priority})")
                         if new_todo.get("related_files"):
                             print(f"   Files: {', '.join(new_todo['related_files'])}")
                         if new_todo.get("notes"):
@@ -373,7 +373,7 @@ Just type your message to start a conversation with the agent.
                                     todo["updated_at"] = todo_item["updated_at"]
 
                                 content = todo.get("content", "")
-                                print(f"\n✅ Todo completed: {content}")
+                                print(f"\nTodo completed: {content}")
                                 if todo.get("related_files"):
                                     print(f"   Files: {', '.join(todo['related_files'])}")
                                 if reason:
@@ -410,7 +410,7 @@ Just type your message to start a conversation with the agent.
                                 # Update timestamp
                                 todo["updated_at"] = datetime.utcnow().isoformat() + "Z"
 
-                                print(f"\n📝 Todo updated: {todo.get('content', '')}")
+                                print(f"\nTodo updated: {todo.get('content', '')}")
                                 print(f"   Updated fields: {', '.join(update_fields)}")
                                 if todo.get("related_files"):
                                     print(f"   Files: {', '.join(todo['related_files'])}")
@@ -426,7 +426,7 @@ Just type your message to start a conversation with the agent.
                     if todo_id and "todo_list" in self.ctx:
                         self.ctx["todo_list"] = [t for t in self.ctx["todo_list"]
                                                 if not (isinstance(t, dict) and t.get("id") == todo_id)]
-                        print(f"\n🗑️ Todo removed: {todo_id}")
+                        print(f"\nTodo removed: {todo_id}")
                         if reason:
                             print(f"   Reason: {reason}")
                         logger.info("Todo removed: %s", todo_id)

@@ -1,0 +1,35 @@
+{
+  "id": "rma_return",
+  "name": "Device Return Process",
+  "description": "Process device return requests by collecting device information, documenting issues, generating RMA tickets, and providing return instructions",
+  "steps": [
+    {
+      "id": 1,
+      "action": "collect_device_info",
+      "guidance": "I'll help you process your device return. First, let me collect information about your device.",
+      "next_tools": ["get_system_info"],
+      "completion_check": "device_info_collected"
+    },
+    {
+      "id": 2,
+      "action": "collect_issue_details",
+      "guidance": "Now please describe the specific issue you're experiencing with the device.",
+      "next_tools": ["write_file"],
+      "completion_check": "issue_documented"
+    },
+    {
+      "id": 3,
+      "action": "generate_rma_ticket",
+      "guidance": "I'll generate an RMA ticket with all the collected information.",
+      "next_tools": ["write_file"],
+      "completion_check": "rma_ticket_created"
+    },
+    {
+      "id": 4,
+      "action": "provide_instructions",
+      "guidance": "Finally, I'll provide you with return shipping instructions and next steps.",
+      "next_tools": ["write_file"],
+      "completion_check": "workflow_complete"
+    }
+  ]
+}

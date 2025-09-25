@@ -267,6 +267,417 @@ def write_block(path: str, start_line: int, text: str) -> Dict[str, Any]:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# --- PDF Extraction Tools ---
+
+@mcp.tool()
+def extract_pdf_text(path: str, use_ocr: bool = False) -> Dict[str, Any]:
+    """
+    Extract text from PDF file using PyPDF2 with fallback to pdfplumber for better extraction
+
+    Args:
+        path: Path to PDF file
+        use_ocr: Whether to attempt OCR if text extraction fails (requires additional setup)
+
+    Returns:
+        Dictionary with extracted text, metadata, and extraction method used
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        # Validate file exists
+        pdf_path = Path(path)
+        if not pdf_path.exists():
+            return {"error": f"PDF file not found: {path}"}
+
+        if pdf_path.suffix.lower() != '.pdf':
+            return {"error": f"File is not a PDF: {path}"}
+
+        # Try pdfplumber first (better text extraction)
+        try:
+            import pdfplumber
+
+            extracted_text = []
+            metadata = {}
+            has_text = False
+
+            with pdfplumber.open(pdf_path) as pdf:
+                metadata = {
+                    "pages": len(pdf.pages),
+                    "author": pdf.metadata.get("Author"),
+                    "creator": pdf.metadata.get("Creator"),
+                    "producer": pdf.metadata.get("Producer"),
+                    "subject": pdf.metadata.get("Subject"),
+                    "title": pdf.metadata.get("Title"),
+                    "creation_date": pdf.metadata.get("CreationDate"),
+                    "modification_date": pdf.metadata.get("ModDate")
+                }
+
+                for page_num, page in enumerate(pdf.pages, 1):
+                    page_text = page.extract_text() or ""
+                    if page_text.strip():
+                        extracted_text.append(f"--- Page {page_num} ---\n{page_text}")
+                        has_text = True
+                    else:
+                        extracted_text.append(f"--- Page {page_num} ---\n[No text found - likely scanned PDF]")
+
+            full_text = "\n\n".join(extracted_text)
+
+            # If no text found and OCR is requested, try OCR
+            if not has_text and use_ocr:
+                logger.info("No text found with pdfplumber, attempting OCR")
+                ocr_result = _attempt_ocr_extraction(pdf_path)
+                if ocr_result.get("success"):
+                    return ocr_result
+
+            return {
+                "success": True,
+                "text": full_text,
+                "metadata": metadata,
+                "method": "pdfplumber",
+                "pages_extracted": len(extracted_text),
+                "has_text": has_text,
+                "ocr_available": use_ocr and not has_text
+            }
+
+        except Exception as pdfplumber_error:
+            logger.warning(f"pdfplumber failed: {pdfplumber_error}, trying PyPDF2")
+
+            # Fallback to PyPDF2
+            try:
+                import PyPDF2
+
+                extracted_text = []
+                has_text = False
+
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+
+                    metadata = {
+                        "pages": len(pdf_reader.pages),
+                        "author": pdf_reader.metadata.get("/Author") if pdf_reader.metadata else None,
+                        "creator": pdf_reader.metadata.get("/Creator") if pdf_reader.metadata else None,
+                        "producer": pdf_reader.metadata.get("/Producer") if pdf_reader.metadata else None,
+                        "subject": pdf_reader.metadata.get("/Subject") if pdf_reader.metadata else None,
+                        "title": pdf_reader.metadata.get("/Title") if pdf_reader.metadata else None
+                    }
+
+                    for page_num, page in enumerate(pdf_reader.pages, 1):
+                        page_text = page.extract_text() or ""
+                        if page_text.strip():
+                            extracted_text.append(f"--- Page {page_num} ---\n{page_text}")
+                            has_text = True
+                        else:
+                            extracted_text.append(f"--- Page {page_num} ---\n[No text found - likely scanned PDF]")
+
+                full_text = "\n\n".join(extracted_text)
+
+                # If no text found and OCR is requested, try OCR
+                if not has_text and use_ocr:
+                    logger.info("No text found with PyPDF2, attempting OCR")
+                    ocr_result = _attempt_ocr_extraction(pdf_path)
+                    if ocr_result.get("success"):
+                        return ocr_result
+
+                return {
+                    "success": True,
+                    "text": full_text,
+                    "metadata": metadata,
+                    "method": "PyPDF2",
+                    "pages_extracted": len(extracted_text),
+                    "has_text": has_text,
+                    "ocr_available": use_ocr and not has_text
+                }
+
+            except Exception as pypdf2_error:
+                logger.error(f"PyPDF2 also failed: {pypdf2_error}")
+                return {
+                    "error": f"PDF text extraction failed with both methods: {pypdf2_error}",
+                    "pdfplumber_error": str(pdfplumber_error),
+                    "pypdf2_error": str(pypdf2_error)
+                }
+
+    except Exception as e:
+        logger.error(f"PDF extraction failed: {e}")
+        return {"error": f"PDF extraction failed: {e}"}
+
+def _attempt_ocr_extraction(pdf_path: Path) -> Dict[str, Any]:
+    """Attempt OCR extraction for scanned PDFs"""
+    try:
+        # Check if OCR libraries are available
+        try:
+            import pytesseract
+            from pdf2image import convert_from_path
+        except ImportError:
+            return {
+                "error": "OCR libraries not available. Install pytesseract and pdf2image for OCR support.",
+                "suggestion": "Run: pip install pytesseract pdf2image"
+            }
+
+        # Convert PDF to images
+        images = convert_from_path(str(pdf_path))
+
+        extracted_text = []
+
+        for page_num, image in enumerate(images, 1):
+            # Perform OCR on each page
+            page_text = pytesseract.image_to_string(image)
+            if page_text.strip():
+                extracted_text.append(f"--- Page {page_num} (OCR) ---\n{page_text}")
+            else:
+                extracted_text.append(f"--- Page {page_num} (OCR) ---\n[No text recognized]")
+
+        full_text = "\n\n".join(extracted_text)
+
+        return {
+            "success": True,
+            "text": full_text,
+            "method": "OCR (pytesseract)",
+            "pages_extracted": len(extracted_text),
+            "has_text": any(text.strip() for text in extracted_text)
+        }
+
+    except Exception as ocr_error:
+        logger.error(f"OCR extraction failed: {ocr_error}")
+        return {
+            "error": f"OCR extraction failed: {ocr_error}",
+            "suggestion": "Ensure tesseract-ocr is installed on your system"
+        }
+
+@mcp.tool()
+def format_markdown_report(path: str, improvements: str = "enhanced readability and visual hierarchy") -> Dict[str, Any]:
+    """
+    Format and improve markdown report layout with better visual hierarchy and readability
+
+    Args:
+        path: Path to markdown file
+        improvements: Description of formatting improvements to apply
+
+    Returns:
+        Dictionary with formatting results and improvements made
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        # Validate file exists
+        md_path = Path(path)
+        if not md_path.exists():
+            return {"error": f"Markdown file not found: {path}"}
+
+        if md_path.suffix.lower() not in ['.md', '.markdown']:
+            return {"error": f"File is not a markdown file: {path}"}
+
+        # Read the current content
+        with open(md_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Analyze current formatting
+        improvements_made = []
+        formatted_content = content
+
+        # Apply formatting improvements
+        if "enhanced readability and visual hierarchy" in improvements.lower():
+            # 1. Improve header consistency
+            formatted_content = _improve_headers(formatted_content)
+            improvements_made.append("Improved header consistency")
+
+            # 2. Enhance table formatting
+            formatted_content = _enhance_tables(formatted_content)
+            improvements_made.append("Enhanced table formatting")
+
+            # 3. Optimize spacing and structure
+            formatted_content = _optimize_spacing(formatted_content)
+            improvements_made.append("Optimized spacing and structure")
+
+            # 4. Add visual elements
+            formatted_content = _add_visual_elements(formatted_content)
+            improvements_made.append("Added visual elements")
+
+            # 5. Improve code blocks
+            formatted_content = _improve_code_blocks(formatted_content)
+            improvements_made.append("Improved code blocks")
+
+        # Create backup and write improved version
+        backup_path = md_path.with_suffix('.md.backup')
+        with open(backup_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(formatted_content)
+
+        return {
+            "success": True,
+            "improvements": improvements_made,
+            "backup_created": str(backup_path),
+            "original_length": len(content),
+            "formatted_length": len(formatted_content),
+            "improvement_summary": f"Applied {len(improvements_made)} formatting improvements"
+        }
+
+    except Exception as e:
+        logger.error(f"Markdown formatting failed: {e}")
+        return {"error": f"Markdown formatting failed: {e}"}
+
+def _improve_headers(content: str) -> str:
+    """Improve header consistency and hierarchy"""
+    lines = content.split('\n')
+    improved_lines = []
+
+    for line in lines:
+        # Ensure consistent header spacing
+        if line.startswith('#'):
+            # Add spacing after headers
+            improved_lines.append(line)
+            if not line.startswith('######'):  # Don't add space after smallest headers
+                improved_lines.append('')
+        else:
+            improved_lines.append(line)
+
+    return '\n'.join(improved_lines)
+
+def _enhance_tables(content: str) -> str:
+    """Enhance table formatting and readability"""
+    lines = content.split('\n')
+    improved_lines = []
+    in_table = False
+
+    for i, line in enumerate(lines):
+        if '|' in line and ('---' in line or i > 0 and '|' in lines[i-1]):
+            if not in_table:
+                improved_lines.append('')  # Add space before table
+                in_table = True
+            improved_lines.append(line)
+            if i < len(lines)-1 and '|' not in lines[i+1]:
+                improved_lines.append('')  # Add space after table
+                in_table = False
+        else:
+            improved_lines.append(line)
+
+    return '\n'.join(improved_lines)
+
+def _optimize_spacing(content: str) -> str:
+    """Optimize spacing and structure for better readability"""
+    lines = content.split('\n')
+    improved_lines = []
+
+    for i, line in enumerate(lines):
+        improved_lines.append(line)
+        # Add spacing after major sections
+        if (line.startswith('## ') and not line.startswith('###')) or line.strip() == '---':
+            if i < len(lines)-1 and lines[i+1].strip() != '':
+                improved_lines.append('')
+
+    return '\n'.join(improved_lines)
+
+def _add_visual_elements(content: str) -> str:
+    """Add visual elements like progress bars and status indicators"""
+    # Add progress bar for compliance scores if not present
+    if 'Compliance Score:' in content and '```' not in content.split('Compliance Score:')[1][:200]:
+        # Find compliance score line and add visual progress bar
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if 'Compliance Score:' in line and '%' in line:
+                # Extract percentage
+                import re
+                match = re.search(r'(\d+)%', line)
+                if match:
+                    percentage = int(match.group(1))
+                    # Add visual progress bar
+                    bar_length = 50
+                    filled = int(percentage / 100 * bar_length)
+                    empty = bar_length - filled
+                    progress_bar = f"```\n{'█' * filled}{'░' * empty}\n```"
+                    lines.insert(i + 1, progress_bar)
+                    lines.insert(i + 2, f"*{percentage} out of 100*")
+                    lines.insert(i + 3, '')
+                    break
+        content = '\n'.join(lines)
+
+    return content
+
+def _improve_code_blocks(content: str) -> str:
+    """Improve code block formatting and syntax highlighting"""
+    # Ensure code blocks have proper spacing
+    lines = content.split('\n')
+    improved_lines = []
+    in_code_block = False
+
+    for i, line in enumerate(lines):
+        if line.strip().startswith('```'):
+            if not in_code_block:
+                improved_lines.append('')  # Add space before code block
+                in_code_block = True
+            else:
+                in_code_block = False
+                improved_lines.append(line)
+                improved_lines.append('')  # Add space after code block
+                continue
+        improved_lines.append(line)
+
+    return '\n'.join(improved_lines)
+
+@mcp.tool()
+def extract_pdf_metadata(path: str) -> Dict[str, Any]:
+    """
+    Extract metadata from PDF file without extracting full text
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        pdf_path = Path(path)
+        if not pdf_path.exists():
+            return {"error": f"PDF file not found: {path}"}
+
+        if pdf_path.suffix.lower() != '.pdf':
+            return {"error": f"File is not a PDF: {path}"}
+
+        # Try pdfplumber first
+        try:
+            import pdfplumber
+
+            with pdfplumber.open(pdf_path) as pdf:
+                metadata = {
+                    "pages": len(pdf.pages),
+                    "author": pdf.metadata.get("Author"),
+                    "creator": pdf.metadata.get("Creator"),
+                    "producer": pdf.metadata.get("Producer"),
+                    "subject": pdf.metadata.get("Subject"),
+                    "title": pdf.metadata.get("Title"),
+                    "creation_date": pdf.metadata.get("CreationDate"),
+                    "modification_date": pdf.metadata.get("ModDate"),
+                    "method": "pdfplumber"
+                }
+
+                return {"success": True, "metadata": metadata}
+
+        except Exception:
+            # Fallback to PyPDF2
+            try:
+                import PyPDF2
+
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+
+                    metadata = {
+                        "pages": len(pdf_reader.pages),
+                        "author": pdf_reader.metadata.get("/Author") if pdf_reader.metadata else None,
+                        "creator": pdf_reader.metadata.get("/Creator") if pdf_reader.metadata else None,
+                        "producer": pdf_reader.metadata.get("/Producer") if pdf_reader.metadata else None,
+                        "subject": pdf_reader.metadata.get("/Subject") if pdf_reader.metadata else None,
+                        "title": pdf_reader.metadata.get("/Title") if pdf_reader.metadata else None,
+                        "method": "PyPDF2"
+                    }
+
+                    return {"success": True, "metadata": metadata}
+
+            except Exception as e:
+                return {"error": f"PDF metadata extraction failed: {e}"}
+
+    except Exception as e:
+        return {"error": f"PDF metadata extraction failed: {e}"}
+
 # --- Workflow System ---
 
 def load_workflows_from_flows_dir(flow_dir: str = "flows") -> Dict[str, Any]:

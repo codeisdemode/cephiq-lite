@@ -1,0 +1,38 @@
+{
+  "id": "system_info",
+  "name": "System Information Collection",
+  "description": "Collect comprehensive system information including hardware specs, disk space, running processes, and generate a detailed system report",
+  "steps": [
+    {
+      "id": 1,
+      "action": "collect_basic_info",
+      "guidance": "I'll help you collect comprehensive system information. First, let me gather basic system details using PowerShell.",
+      "next_tools": ["powershell"],
+      "command": "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory, CsProcessors | ConvertTo-Json",
+      "completion_check": "system_info_collected"
+    },
+    {
+      "id": 2,
+      "action": "collect_disk_info",
+      "guidance": "Now I'll check disk space and storage information.",
+      "next_tools": ["powershell"],
+      "command": "Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, Size, FreeSpace, VolumeName | ConvertTo-Json",
+      "completion_check": "disk_info_collected"
+    },
+    {
+      "id": 3,
+      "action": "collect_process_info",
+      "guidance": "Let me gather information about running processes and system performance.",
+      "next_tools": ["powershell"],
+      "command": "Get-Process | Select-Object Name, CPU, WorkingSet | Sort-Object CPU -Descending | Select-Object -First 10 | ConvertTo-Json",
+      "completion_check": "process_info_collected"
+    },
+    {
+      "id": 4,
+      "action": "generate_report",
+      "guidance": "Finally, I'll compile all the information into a comprehensive system report.",
+      "next_tools": ["create_file"],
+      "completion_check": "workflow_complete"
+    }
+  ]
+}

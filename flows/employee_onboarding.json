@@ -1,0 +1,35 @@
+{
+  "id": "employee_onboarding",
+  "name": "Employee Onboarding Process",
+  "description": "Onboard new employees by collecting their details, setting up workspace and system access, creating documentation, and providing orientation materials",
+  "steps": [
+    {
+      "id": 1,
+      "action": "collect_employee_details",
+      "guidance": "I'll help you onboard a new employee. First, let me collect their basic information.",
+      "next_tools": ["write_file"],
+      "completion_check": "employee_details_collected"
+    },
+    {
+      "id": 2,
+      "action": "setup_workspace",
+      "guidance": "Now I'll help set up their workspace and system access.",
+      "next_tools": ["execute_command", "write_file"],
+      "completion_check": "workspace_prepared"
+    },
+    {
+      "id": 3,
+      "action": "create_documentation",
+      "guidance": "I'll create onboarding documentation and checklists for the new employee.",
+      "next_tools": ["write_file"],
+      "completion_check": "documentation_created"
+    },
+    {
+      "id": 4,
+      "action": "finalize_onboarding",
+      "guidance": "Finally, I'll compile all onboarding materials and provide next steps.",
+      "next_tools": ["write_file"],
+      "completion_check": "workflow_complete"
+    }
+  ]
+}
