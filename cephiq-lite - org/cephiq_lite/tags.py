@@ -17,7 +17,9 @@ class TagKind(str, Enum):
     COMPANY = "company"
     FUNCTION = "function"
     ROLE = "role"
-    FLOW = "flow"
+    FLOW = "flow"  # DEPRECATED: Use APPROACH for tool usage guidelines
+    APPROACH = "approach"  # Tool usage guidelines and methodologies
+    WORKFLOW = "workflow"  # Multi-step process orchestration (future)
     TOOL = "tool"
     GUARDRAIL = "guardrail"
 
@@ -208,9 +210,14 @@ Always use the envelope protocol for structured decision making.
             prompt_parts.append("\n=== ROLE CONTEXT ===")
             prompt_parts.extend(sections[TagKind.ROLE.value])
 
-        # Flow context
+        # Approach context (tool usage guidelines and methodologies)
+        if TagKind.APPROACH.value in sections:
+            prompt_parts.append("\n=== APPROACH CONTEXT ===")
+            prompt_parts.extend(sections[TagKind.APPROACH.value])
+
+        # Flow context (DEPRECATED - backward compatibility)
         if TagKind.FLOW.value in sections:
-            prompt_parts.append("\n=== FLOW CONTEXT ===")
+            prompt_parts.append("\n=== FLOW CONTEXT (DEPRECATED) ===")
             prompt_parts.extend(sections[TagKind.FLOW.value])
 
         # Tool context
@@ -265,7 +272,8 @@ Always use the envelope protocol for structured decision making.
 
     def get_flow_tags(self, intent: str) -> List[Tag]:
         """
-        Get flow tags matching an intent
+        DEPRECATED: Get flow tags matching an intent
+        Use get_approach_tags() instead for tool usage guidelines
 
         Args:
             intent: User intent to match against flow tags
@@ -273,6 +281,12 @@ Always use the envelope protocol for structured decision making.
         Returns:
             List of matching flow tags
         """
+        import warnings
+        warnings.warn(
+            "get_flow_tags() is deprecated. Use get_approach_tags() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         flow_tags = []
 
         for tag in self.tags.values():
@@ -280,6 +294,25 @@ Always use the envelope protocol for structured decision making.
                 flow_tags.append(tag)
 
         return flow_tags
+
+    def get_approach_tags(self, intent: str = "") -> List[Tag]:
+        """
+        Get approach tags for tool usage guidelines
+
+        Args:
+            intent: Optional intent to filter approach tags
+
+        Returns:
+            List of approach tags (all or filtered by intent)
+        """
+        approach_tags = []
+
+        for tag in self.tags.values():
+            if tag.kind == TagKind.APPROACH:
+                if not intent or tag.tag.endswith(f"_{intent}"):
+                    approach_tags.append(tag)
+
+        return approach_tags
 
     def validate_tool_access(self, tool: str, tags: List[Tag]) -> bool:
         """

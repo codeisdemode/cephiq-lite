@@ -134,59 +134,62 @@ You can only list files and see the current directory.
 
 
 def create_flow_tags():
-    """Workflow-specific tags for different tasks"""
+    """DEPRECATED: Workflow-specific tags for different tasks
+    Use create_approach_tags() instead for tool usage guidelines
+    """
+    import warnings
+    warnings.warn(
+        "create_flow_tags() is deprecated. Use create_approach_tags() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    return []  # Return empty list since we've migrated to approach tags
+
+
+def create_approach_tags():
+    """Approach tags for tool usage guidelines and methodologies"""
     return [
-        # File management flow
+        # File operations approach
         Tag(
-            tag="flow_file_management",
-            kind=TagKind.FLOW,
+            tag="approach_file_operations",
+            kind=TagKind.APPROACH,
             payload=TagPayload(
                 meta=TagMeta(
-                    name="File Management",
-                    description="File creation and editing workflow"
+                    name="File Operations Approach",
+                    description="Guidelines for file operations"
                 ),
                 config=TagConfig(
                     assigned_roles=["developer"],
                     priority=5
                 ),
                 content="""
-File Management Flow:
+File Operations Approach:
 
-1. When creating files:
-   - Use create_file with meaningful content
-   - Include proper file extensions
-   - Consider file organization
-
-2. When reading files:
-   - Use read_file to examine content
-   - Look for patterns and structure
-
-3. When editing files:
-   - Use edit_file for precise modifications
-   - Make minimal changes when possible
-   - Preserve existing structure
-
-4. When exploring:
-   - Use list_files and directory_tree to understand project structure
+When working with files:
+- Use create_file for new files with meaningful content
+- Use read_file to examine existing files before editing
+- Use edit_file for precise modifications, preserving structure
+- Use list_files and directory_tree to understand project layout
+- Consider file organization and naming conventions
 """
             )
         ),
 
-        # Code analysis flow
+        # Code analysis approach
         Tag(
-            tag="flow_code_analysis",
-            kind=TagKind.FLOW,
+            tag="approach_code_analysis",
+            kind=TagKind.APPROACH,
             payload=TagPayload(
                 meta=TagMeta(
-                    name="Code Analysis",
-                    description="Code review and analysis workflow"
+                    name="Code Analysis Approach",
+                    description="Methodology for code analysis"
                 ),
                 config=TagConfig(
                     assigned_roles=["analyst", "developer"],
                     priority=5
                 ),
                 content="""
-Code Analysis Flow:
+Code Analysis Approach:
 
 1. Explore project structure:
    - Use directory_tree to understand layout
@@ -194,57 +197,46 @@ Code Analysis Flow:
 
 2. Read key files:
    - Start with README.md for project overview
-   - Examine main entry points
-   - Look for configuration files
+   - Examine main entry points and configuration files
 
-3. Analyze code patterns:
-   - Identify programming languages used
-   - Look for architectural patterns
-   - Check for documentation quality
+3. Analyze patterns:
+   - Identify programming languages and frameworks
+   - Look for architectural patterns and documentation
 
-4. Report findings:
-   - Summarize project structure
-   - Identify potential issues
-   - Suggest improvements
+4. Report findings clearly and concisely
 """
             )
         ),
 
-        # Documentation flow
+        # Documentation approach
         Tag(
-            tag="flow_documentation",
-            kind=TagKind.FLOW,
+            tag="approach_documentation",
+            kind=TagKind.APPROACH,
             payload=TagPayload(
                 meta=TagMeta(
-                    name="Documentation",
-                    description="Documentation creation and maintenance"
+                    name="Documentation Approach",
+                    description="Methodology for documentation"
                 ),
                 config=TagConfig(
                     assigned_roles=["developer"],
                     priority=5
                 ),
                 content="""
-Documentation Flow:
+Documentation Approach:
 
 1. Assess existing documentation:
-   - Check for README.md
-   - Look for docstrings in code
-   - Identify documentation gaps
+   - Check for README.md and docstrings
+   - Identify gaps and outdated information
 
-2. Create documentation:
-   - Use clear, concise language
-   - Include examples when helpful
+2. Create clear documentation:
+   - Use simple, concise language
+   - Include practical examples
    - Structure information logically
 
-3. Update documentation:
-   - Keep documentation current with code
-   - Add new features to docs
-   - Fix outdated information
-
-4. Documentation best practices:
-   - Use markdown for formatting
-   - Include code examples
-   - Add table of contents for long docs
+3. Maintain documentation:
+   - Keep docs current with code changes
+   - Add new features to documentation
+   - Fix outdated information promptly
 """
             )
         )
@@ -361,7 +353,7 @@ def load_all_tag_contracts(tag_manager):
     all_tags = []
     all_tags.extend(create_company_tags())
     all_tags.extend(create_role_tags())
-    all_tags.extend(create_flow_tags())
+    all_tags.extend(create_approach_tags())  # Use approach tags instead of flow tags
     all_tags.extend(create_guardrail_tags())
     all_tags.extend(create_function_tags())
 
