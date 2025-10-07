@@ -14,6 +14,7 @@ from .llm import LLMClient
 from .tools import ToolExecutor
 from .prompt import PromptBuilder
 from .envelope import create_error_envelope
+from .tags import TagManager
 
 
 class Agent:
@@ -29,6 +30,11 @@ class Agent:
             timeout=config.tool_timeout
         )
         self.prompt_builder = PromptBuilder(custom_system_prompt=config.custom_system_prompt)
+
+        # Tag management
+        self.tag_manager = TagManager()
+        self.current_tags: List = []
+        self.allowed_tools: set = set()
 
         # State
         self.history: List[Dict[str, Any]] = []
@@ -51,6 +57,15 @@ class Agent:
             - stats: dict (cycles, tokens, duration)
         """
         self.start_time = time.time()
+
+        # Initialize tag-based permissions
+        if self.config.enable_tags:
+            self.current_tags = self.tag_manager.resolve_tags_for_user(
+                user_id=self.config.user_id,
+                user_roles=self.config.user_roles,
+                org_id=self.config.org_id
+            )
+            self.allowed_tools = self.tag_manager.get_allowed_tools(self.current_tags)
 
         last_observation = None
         final_envelope = None
@@ -196,6 +211,15 @@ class Agent:
         tool = envelope.get("tool")
         arguments = envelope.get("arguments", {})
 
+        # Check tool permissions
+        if self.config.enable_tags and not self.tag_manager.validate_tool_access(tool, self.current_tags):
+            return {
+                "success": False,
+                "tool": tool,
+                "error": f"Tool '{tool}' not allowed by current permissions",
+                "duration_ms": 0
+            }
+
         if self.config.verbose:
             print(f"  → Executing tool: {tool}")
 
@@ -214,6 +238,26 @@ class Agent:
     def _execute_multi_tool(self, envelope: Dict[str, Any]) -> Dict[str, Any]:
         """Execute multiple tools from envelope"""
         tools_array = envelope.get("tools", [])
+
+        # Check tool permissions for each tool
+        if self.config.enable_tags:
+            filtered_tools = []
+            for tool_item in tools_array:
+                tool = tool_item.get("tool")
+                if self.tag_manager.validate_tool_access(tool, self.current_tags):
+                    filtered_tools.append(tool_item)
+                else:
+                    if self.config.verbose:
+                        print(f"  → Skipping tool '{tool}' (not allowed by permissions)")
+
+            if len(filtered_tools) != len(tools_array):
+                tools_array = filtered_tools
+                if not tools_array:
+                    return {
+                        "success": False,
+                        "error": "No tools allowed by current permissions",
+                        "tool": "multi_tool"
+                    }
 
         if self.config.verbose:
             print(f"  → Executing {len(tools_array)} tools in parallel...")

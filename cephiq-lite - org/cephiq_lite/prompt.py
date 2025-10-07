@@ -132,13 +132,21 @@ class PromptBuilder:
 
     def __init__(self, custom_system_prompt: Optional[str] = None):
         self.system_prompt = custom_system_prompt or SYSTEM_PROMPT_V2_1
+        self.use_tags = False
+        self.tag_manager = None
+
+    def set_tag_manager(self, tag_manager):
+        """Set tag manager for tag-based prompts"""
+        self.tag_manager = tag_manager
+        self.use_tags = True
 
     def build_messages(
         self,
         goal: str,
         history: List[Dict[str, Any]],
         last_observation: Optional[Dict[str, Any]] = None,
-        budgets: Optional[Dict[str, int]] = None
+        budgets: Optional[Dict[str, int]] = None,
+        tags: Optional[List] = None
     ) -> List[Dict[str, str]]:
         """
         Build message list for LLM
@@ -148,6 +156,7 @@ class PromptBuilder:
             history: List of events
             last_observation: Result from last tool execution
             budgets: Remaining budgets {cycles, tokens}
+            tags: List of resolved tags for tag-based prompts
 
         Returns:
             List of {"role": "system/user", "content": "..."}
@@ -155,9 +164,16 @@ class PromptBuilder:
         messages = []
 
         # System message
+        if self.use_tags and tags and self.tag_manager:
+            # Use tag-based system prompt
+            system_prompt = self.tag_manager.build_system_prompt(tags)
+        else:
+            # Use default system prompt
+            system_prompt = self.system_prompt
+
         messages.append({
             "role": "system",
-            "content": self.system_prompt
+            "content": system_prompt
         })
 
         # User message with context

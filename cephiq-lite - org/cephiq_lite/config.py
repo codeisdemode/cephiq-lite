@@ -29,6 +29,12 @@ class AgentConfig:
     enable_multi_tool: bool = True  # Enable parallel tool execution
     enable_confidence: bool = True  # Include confidence scores
 
+    # Tag management
+    enable_tags: bool = True  # Enable tag-based permissions and workflows
+    user_id: str = "default_user"
+    user_roles: list = None  # Will be initialized to ["agent"]
+    org_id: str = ""
+
     # Prompt customization
     custom_system_prompt: Optional[str] = None
 
@@ -47,3 +53,7 @@ class AgentConfig:
         if not self.mcp_server_path and not self.mcp_server_url:
             # Default to built-in tools
             self.mcp_server_path = "builtin"
+
+        # Initialize user_roles if not provided
+        if self.user_roles is None:
+            self.user_roles = ["agent"]
