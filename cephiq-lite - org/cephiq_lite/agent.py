@@ -221,7 +221,7 @@ class Agent:
             }
 
         if self.config.verbose:
-            print(f"  → Executing tool: {tool}")
+            print(f"  -> Executing tool: {tool}")
 
         result = self.tools.execute_single(tool, arguments)
 
@@ -231,7 +231,7 @@ class Agent:
         if self.config.verbose:
             status = "OK" if result.get("success") else "FAIL"
             duration = result.get("duration_ms", 0)
-            print(f"  ← {status} ({duration}ms)")
+            print(f"  <- {status} ({duration}ms)")
 
         return result
 
@@ -260,7 +260,7 @@ class Agent:
                     }
 
         if self.config.verbose:
-            print(f"  → Executing {len(tools_array)} tools in parallel...")
+            print(f"  -> Executing {len(tools_array)} tools in parallel...")
 
         # Check if multi-tool is enabled
         if not self.config.enable_multi_tool:
@@ -278,7 +278,7 @@ class Agent:
         if self.config.verbose:
             all_ok = result.get("all_success", False)
             status = "ALL OK" if all_ok else "PARTIAL"
-            print(f"  ← {status}")
+            print(f"  <- {status}")
 
         return result
 
